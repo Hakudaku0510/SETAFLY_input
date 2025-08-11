@@ -1,1 +1,1 @@
-hello sky!# SETAFLY_input
+hello sky!
