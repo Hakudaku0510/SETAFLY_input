@@ -27,12 +27,15 @@
       .ok { color: #79ffa1; }
       .err { color: #ff7e79; }
       .list { margin-top: 20px; border-top: 1px dashed #2a3557; padding-top: 16px; }
+      .list-head { display:flex; justify-content: space-between; align-items:center; gap:12px; }
       table { width: 100%; border-collapse: collapse; margin-top: 10px; }
       th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #202a49; font-variant-numeric: tabular-nums; }
       th { color: #9fb2ff; }
       .small { font-size: 12px; color: #8b93a8; }
       .footer { margin-top: 18px; }
       code { background: #0f152b; padding: 2px 6px; border-radius: 8px; border: 1px solid #263157; }
+      tr[data-id]:hover { background: #151d3a; cursor: pointer; }
+      .hint { font-size:12px; color:#8b93a8; }
     </style>
   </head>
   <body>
@@ -54,7 +57,13 @@
         </form>
 
         <div class="list">
-          <div class="muted">最近追加されたデータ（最新10件）</div>
+          <div class="list-head">
+            <div class="muted" id="list-title">最近追加されたデータ（最新10件）</div>
+            <div class="actions" style="margin:0">
+              <button id="toggle-btn" type="button">すべて表示</button>
+            </div>
+          </div>
+          <div class="hint">※ 行をタップ/クリックすると削除できます（確認ダイアログあり）</div>
           <table>
             <thead>
               <tr><th style="width:30%">名前</th><th style="width:20%">点数</th><th style="width:10%">タイプ</th><th>作成日時</th></tr>
@@ -79,6 +88,10 @@
       const statusEl = $("#status");
       const btn = $("#submit-btn");
       const rows = $("#rows");
+      const toggleBtn = $("#toggle-btn");
+      const listTitle = $("#list-title");
+
+      let showAll = false; // ← ここで表示モードを管理
 
       function setStatus(text, kind = "muted") {
         statusEl.className = `actions ${kind}`;
@@ -86,13 +99,17 @@
       }
 
       async function refreshList() {
-        const { data, error } = await supabase
+        const base = supabase
           .from("Test")
-          .select("username, text, type, created_at")
-          .order("created_at", { ascending: false })
-          .limit(10);
+          // 削除に必要な主キー id を取得
+          .select("id, username, text, type, created_at")
+          .order("created_at", { ascending: false });
+
+        const query = showAll ? base : base.limit(10);
+
+        const { data, error } = await query;
         if (error) {
-          rows.innerHTML = `<tr><td colspan="4" class="err">取得エラー: ${error.message}</td></tr>`;
+          rows.innerHTML = `<tr><td colspan="4" class="err">取得エラー: ${escapeHtml(error.message)}</td></tr>`;
           return;
         }
         if (!data || data.length === 0) {
@@ -101,9 +118,18 @@
         }
         rows.innerHTML = data
           .map(
-            (r) => `<tr><td>${escapeHtml(r.username)}</td><td>${r.text}</td><td>${r.type}</td><td>${fmt(r.created_at)}</td></tr>`
+            (r) =>
+              `<tr data-id="${r.id}">
+                 <td>${escapeHtml(r.username)}</td>
+                 <td>${r.text}</td>
+                 <td>${r.type}</td>
+                 <td>${fmt(r.created_at)}</td>
+               </tr>`
           )
           .join("");
+
+        listTitle.textContent = showAll ? `すべてのデータ（${data.length}件 / 最新順）` : "最近追加されたデータ（最新10件）";
+        toggleBtn.textContent = showAll ? "最新10件に戻す" : "すべて表示";
       }
 
       function fmt(iso) {
@@ -121,6 +147,7 @@
           .replaceAll("'", "&#039;");
       }
 
+      // 送信
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const formData = new FormData(form);
@@ -143,6 +170,36 @@
         btn.disabled = false;
       });
 
+      // 表示切り替え
+      toggleBtn.addEventListener("click", async () => {
+        toggleBtn.disabled = true;
+        showAll = !showAll;
+        await refreshList();
+        toggleBtn.disabled = false;
+      });
+
+      // 行クリックで削除（確認あり）
+      rows.addEventListener("click", async (e) => {
+        const tr = e.target.closest("tr[data-id]");
+        if (!tr) return;
+        const id = tr.getAttribute("data-id");
+        const name = tr.children[0]?.textContent ?? "";
+        const score = tr.children[1]?.textContent ?? "";
+
+        const ok = window.confirm(`このデータを削除しますか？\n\n名前: ${name}\n点数: ${score}\n\n※この操作は取り消せません`);
+        if (!ok) return;
+
+        setStatus("削除中…");
+        const { error } = await supabase.from("Test").delete().eq("id", id);
+        if (error) {
+          setStatus(`削除失敗: ${error.message}`, "err");
+          return;
+        }
+        setStatus("削除しました", "ok");
+        await refreshList();
+      });
+
+      // 接続テスト & 初回ロード
       setStatus("接続中…");
       supabase.from("Test").select("count", { count: "exact", head: true })
         .then(({ error }) => {
