@@ -39,15 +39,15 @@
     <div class="wrap">
       <div class="card">
         <h1>スコア送信フォーム</h1>
-        <p class="muted">名前と点数を入力して <strong>Supabase</strong> の <code>Test</code> テーブルに保存します。カラム名は <code>username</code>、<code>text</code>、<code>type</code>（常に1）です。</p>
+        <p class="muted">名前と点数を入力してください</p>
 
         <form id="score-form">
           <label for="username">名前</label>
-          <input id="username" name="username" type="text" placeholder="例: さとう" required />
+          <input id="username" name="username" type="text" placeholder="例: ゆうか" required />
 
           <label for="text">点数</label>
           <div class="row">
-            <input id="text" name="text" type="number" min="0" max="1000" step="1" placeholder="例: 92" required />
+            <input id="text" name="text" type="number" min="0" max="10000000000000000" step="1" placeholder="例: 92" required />
             <button id="submit-btn" type="submit">決定</button>
           </div>
           <div id="status" class="actions muted">準備中…</div>
