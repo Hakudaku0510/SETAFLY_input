@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>スコア送信フォーム (Supabase)</title>
+    <style>
+      :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+      body { margin: 0; background: #0b1020; color: #e6e8ef; }
+      .wrap { max-width: 720px; margin: 48px auto; padding: 24px; }
+      .card { background: #121933; border: 1px solid #28314f; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.2); }
+      h1 { margin: 0 0 12px; font-size: 22px; }
+      p { color: #aab0c2; }
+      label { display: block; margin: 12px 0 6px; font-weight: 600; }
+      input, button { font: inherit; }
+      input {
+        width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid #344063; background: #0f152b; color: #e6e8ef;
+      }
+      input:focus { outline: 2px solid #4f8cff55; border-color: #4f8cffaa; }
+      .row { display: grid; grid-template-columns: 1fr 160px; gap: 12px; }
+      .actions { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
+      button {
+        padding: 12px 16px; border-radius: 12px; border: 1px solid #4f8cff; background: #4f8cff; color: white; cursor: pointer; font-weight: 700;
+      }
+      button[disabled] { opacity: .6; cursor: not-allowed; }
+      .muted { color: #96a0b8; font-size: 14px; }
+      .ok { color: #79ffa1; }
+      .err { color: #ff7e79; }
+      .list { margin-top: 20px; border-top: 1px dashed #2a3557; padding-top: 16px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #202a49; font-variant-numeric: tabular-nums; }
+      th { color: #9fb2ff; }
+      .small { font-size: 12px; color: #8b93a8; }
+      .footer { margin-top: 18px; }
+      code { background: #0f152b; padding: 2px 6px; border-radius: 8px; border: 1px solid #263157; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>スコア送信フォーム</h1>
+        <p class="muted">名前と点数を入力して <strong>Supabase</strong> の <code>Test</code> テーブルに保存します。カラム名は <code>username</code>、<code>text</code>、<code>type</code>（常に1）です。</p>
+
+        <form id="score-form">
+          <label for="username">名前</label>
+          <input id="username" name="username" type="text" placeholder="例: さとう" required />
+
+          <label for="text">点数</label>
+          <div class="row">
+            <input id="text" name="text" type="number" min="0" max="1000" step="1" placeholder="例: 92" required />
+            <button id="submit-btn" type="submit">決定</button>
+          </div>
+          <div id="status" class="actions muted">準備中…</div>
+        </form>
+
+        <div class="list">
+          <div class="muted">最近追加されたデータ（最新10件）</div>
+          <table>
+            <thead>
+              <tr><th style="width:30%">名前</th><th style="width:20%">点数</th><th style="width:10%">タイプ</th><th>作成日時</th></tr>
+            </thead>
+            <tbody id="rows"><tr><td colspan="4" class="small">読み込み中…</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="footer small">環境変数はこのHTMLの上部で設定できます。公開サイトでは <code>anon key</code> のみを使用してください。</div>
+      </div>
+    </div>
+
+    <script type="module">
+      const SUPABASE_URL = "https://YOUR-PROJECT-REF.supabase.co";
+      const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
+
+      import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      const $ = (sel) => document.querySelector(sel);
+      const form = $("#score-form");
+      const statusEl = $("#status");
+      const btn = $("#submit-btn");
+      const rows = $("#rows");
+
+      function setStatus(text, kind = "muted") {
+        statusEl.className = `actions ${kind}`;
+        statusEl.textContent = text;
+      }
+
+      async function refreshList() {
+        const { data, error } = await supabase
+          .from("Test")
+          .select("username, text, type, created_at")
+          .order("created_at", { ascending: false })
+          .limit(10);
+        if (error) {
+          rows.innerHTML = `<tr><td colspan="4" class="err">取得エラー: ${error.message}</td></tr>`;
+          return;
+        }
+        if (!data || data.length === 0) {
+          rows.innerHTML = `<tr><td colspan="4" class="small">まだデータがありません。</td></tr>`;
+          return;
+        }
+        rows.innerHTML = data
+          .map(
+            (r) => `<tr><td>${escapeHtml(r.username)}</td><td>${r.text}</td><td>${r.type}</td><td>${fmt(r.created_at)}</td></tr>`
+          )
+          .join("");
+      }
+
+      function fmt(iso) {
+        const d = new Date(iso);
+        const z = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`;
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        const username = String(formData.get("username") || "").trim();
+        const text = Number(formData.get("text"));
+        if (!username || Number.isNaN(text)) {
+          setStatus("入力を確認してください", "err");
+          return;
+        }
+        btn.disabled = true;
+        setStatus("送信中…");
+        const { error } = await supabase.from("Test").insert({ username, text, type: 1 });
+        if (error) {
+          setStatus(`送信失敗: ${error.message}`, "err");
+        } else {
+          setStatus("送信しました！", "ok");
+          form.reset();
+          await refreshList();
+        }
+        btn.disabled = false;
+      });
+
+      setStatus("接続中…");
+      supabase.from("Test").select("count", { count: "exact", head: true })
+        .then(({ error }) => {
+          if (error) setStatus(`接続エラー: ${error.message}`, "err");
+          else setStatus("準備OK");
+        });
+      refreshList();
+    </script>
+  </body>
+</html>
